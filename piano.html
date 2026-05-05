@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Piano Greg Maker</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a1a;
+            color: white;
+            font-family: sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+        #piano {
+            display: flex;
+            gap: 5px;
+            padding: 20px;
+            background: #333;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .key {
+            width: 60px;
+            height: 200px;
+            background: white;
+            color: #333;
+            border-radius: 0 0 5px 5px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 15px;
+            font-weight: bold;
+            transition: transform 0.1s, background 0.1s;
+        }
+        .key.active {
+            background: #ddd;
+            transform: translateY(5px);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+        }
+        #info {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        footer {
+            position: absolute;
+            bottom: 15px;
+            font-size: 0.8rem;
+            color: #777;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info">
+        Mouse (esquerda/direita): Frequência | Mouse (cima/baixo): Volume<br>
+        Clique na tela para ativar o áudio.
+    </div>
+
+    <div id="piano">
+        <div class="key" data-key="w">W</div>
+        <div class="key" data-key="a">A</div>
+        <div class="key" data-key="s">S</div>
+        <div class="key" data-key="d">D</div>
+        <div class="key" data-key="f">F</div>
+        <div class="key" data-key="ArrowLeft">←</div>
+        <div class="key" data-key="ArrowUp">↑</div>
+        <div class="key" data-key="ArrowDown">↓</div>
+        <div class="key" data-key="ArrowRight">→</div>
+        <div class="key" data-key=" ">Espaço</div>
+        <div class="key" data-key="Enter">Enter</div>
+    </div>
+
+    <footer>made by Gabriel Spressola Ziviani</footer>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const activeOscillators = {};
+        let modulationFactor = 1;
+        let volumeLevel = 0.2;
+
+        const frequencies = {
+            'w': 261.63,
+            'a': 293.66,
+            's': 329.63,
+            'd': 349.23,
+            'f': 392.00,
+            'ArrowLeft': 440.00,
+            'ArrowUp': 493.88,
+            'ArrowDown': 523.25,
+            'ArrowRight': 587.33,
+            ' ': 659.25,
+            'Enter': 739.989
+        };
+
+        window.addEventListener('mousemove', (e) => {
+            modulationFactor = 0.5 + (e.clientX / window.innerWidth) * 1.5;
+            // Inverte o eixo Y para que "cima" seja maior volume
+            volumeLevel = 1 - (e.clientY / window.innerHeight);
+            // Limitador para evitar distorção (0.0 a 0.5)
+            volumeLevel = Math.max(0, Math.min(0.5, volumeLevel));
+            
+            for (let key in activeOscillators) {
+                const baseFreq = frequencies[key];
+                activeOscillators[key].osc.frequency.setTargetAtTime(baseFreq * modulationFactor, audioCtx.currentTime, 0.05);
+                activeOscillators[key].gain.gain.setTargetAtTime(volumeLevel, audioCtx.currentTime, 0.05);
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const key = e.key;
+            if (frequencies[key] && !activeOscillators[key]) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(frequencies[key] * modulationFactor, audioCtx.currentTime);
+
+                gain.gain.setValueAtTime(volumeLevel, audioCtx.currentTime);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                activeOscillators[key] = { osc, gain };
+
+                const el = document.querySelector(`[data-key="${key === ' ' ? ' ' : key}"]`);
+                if (el) el.classList.add('active');
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key;
+            if (activeOscillators[key]) {
+                const { osc, gain } = activeOscillators[key];
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+                osc.stop(audioCtx.currentTime + 0.1);
+                delete activeOscillators[key];
+
+                const el = document.querySelector(`[data-key="${key === ' ' ? ' ' : key}"]`);
+                if (el) el.classList.remove('active');
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) {
+                e.preventDefault();
+            }
+        }, false);
+    </script>
+</body>
+</html>
